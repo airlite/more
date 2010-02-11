@@ -1,6 +1,6 @@
 # Less::More provides methods for parsing LESS files in a rails application to CSS target files.
 # 
-# When Less::More.parse is called, all files in Less::More.source_path will be parsed using LESS
+# When Less::More.parse is called, all files in Less::More.source_paths will be parsed using LESS
 # and saved as CSS files in Less::More.destination_path. If Less::More.compression is set to true,
 # extra line breaks will be removed to compress the CSS files.
 #
@@ -78,25 +78,27 @@ class Less::More
       ENV.any? {|key, value| key =~ /^heroku/i }
     end
     
-    # Returns the LESS source path, see `source_path=`
-    def source_path
-      @source_path || Rails.root.join("app", "stylesheets")
+    # Returns the LESS source paths, see `add_source_path`
+    def source_paths
+      @source_paths ||= Array.new
     end
     
-    # Sets the source path for LESS files. This directory will be scanned recursively for all *.less files. Files prefixed
+    # add a source path for LESS files. This directory will be scanned recursively for all *.less files. Files prefixed
     # with an underscore is considered to be partials and are not parsed directly. These files can be included using `@import`
     # statements. *Example partial filename: _form.less*
     #
     # Default value is app/stylesheets
     #
     # Examples:
-    #   Less::More.source_path = "/path/to/less/files"
-    #   Less::More.source_path = Pathname.new("/other/path")
-    def source_path=(path)
-      @source_path = Pathname.new(path.to_s)
+    #   Less::More.add_source_path "/path/to/less/files"
+    #   Less::More.add_source_path Pathname.new("/other/path")
+    def add_source_path(path)
+      path = Pathname.new(path.to_s)
+      @source_paths ||= Array.new
+      @source_paths << path unless @source_paths.include?(path)
     end
     
-    # Checks if a .less or .lss file exists in Less::More.source_path matching
+    # Checks if a .less or .lss file exists in Less::More.source_paths matching
     # the given parameters.
     #
     #   Less::More.exists?(["screen"])
@@ -109,10 +111,10 @@ class Less::More
     end
     
     def cache_path
-      File.join(RAILS_ROOT, 'tmp', 'less-cache')
+      File.join(Rails.root, 'tmp', 'less-cache')
     end
             
-    # Generates the .css from a .less or .lss file in Less::More.source_path matching
+    # Generates the .css from a .less or .lss file in Less::More.source_paths matching
     # the given parameters.
     #
     #   Less::More.generate(["screen"])
@@ -123,7 +125,7 @@ class Less::More
       source = pathname_from_array(path_as_array)
       
       # put together our destination dir and path (need dir so we can create subdirectories)
-      destination_dir = source.dirname.to_s.gsub(source_path, cache_path)
+      destination_dir = File.join(cache_path.to_s, *path_as_array[0...-1])
       destination = File.join(destination_dir, source.basename.to_s.gsub('.less', '.css').gsub('.lss', '.css'))
       
       # check if the destination file exists, and compare the modified times to see if it needs to be written
@@ -156,46 +158,56 @@ class Less::More
     
     # Generates all the .css files.
     def parse
-      Less::More.all_less_files.each do |path|
-        # Get path
-        relative_path = path.relative_path_from(Less::More.source_path)
-        path_as_array = relative_path.to_s.split(File::SEPARATOR)
-        path_as_array[-1] = File.basename(path_as_array[-1], File.extname(path_as_array[-1]))
+      source_paths.each do |source_path|
+        Less::More.all_less_files(source_path).each do |path|
+          # Get path
+          relative_path = path.relative_path_from(source_path)
+          path_as_array = relative_path.to_s.split(File::SEPARATOR)
+          path_as_array[-1] = File.basename(path_as_array[-1], File.extname(path_as_array[-1]))
 
-        # Generate CSS
-        css = Less::More.generate(path_as_array)
+          # Generate CSS
+          css = Less::More.generate(path_as_array)
 
-        # Store CSS
-        path_as_array[-1] = path_as_array[-1] + ".css"
-        destination = Pathname.new(File.join(Rails.root, "public", Less::More.destination_path)).join(*path_as_array)
-        destination.dirname.mkpath
+          # Store CSS
+          path_as_array[-1] = path_as_array[-1] + ".css"
+          destination = Pathname.new(File.join(Rails.root, "public", Less::More.destination_path)).join(*path_as_array)
+          destination.dirname.mkpath
 
-        File.open(destination, "w") {|f|
-          f.puts css
-        }
+          File.open(destination, "w") {|f|
+            f.puts css
+          }
+        end
       end
     end
     
     # Removes all generated css files.
     def clean
-      all_less_files.each do |path|
-        relative_path = path.relative_path_from(Less::More.source_path)
-        css_path = relative_path.to_s.sub(/(le?|c)ss$/, "css")
-        css_file = File.join(Rails.root, "public", Less::More.destination_path, css_path)
-        File.delete(css_file) if File.file?(css_file)
+      source_paths.each do |source_path|
+        all_less_files(source_path).each do |path|
+          relative_path = path.relative_path_from(source_path)
+          css_path = relative_path.to_s.sub(/(le?|c)ss$/, "css")
+          css_file = File.join(Rails.root, "public", Less::More.destination_path, css_path)
+          File.delete(css_file) if File.file?(css_file)
+        end
       end
     end
     
     # Array of Pathname instances for all the less source files.
-    def all_less_files
-      Dir[Less::More.source_path.join("**", "*.{css,less,lss}").to_s].map! {|f| Pathname.new(f) }
+    def all_less_files(paths = source_paths)
+      [paths].flatten.collect do |path|
+        Dir[path.join("**", "*.{css,less,lss}").to_s].map! { |f| Pathname.new(f) }
+      end.flatten
     end
     
-    # Converts ["foo", "bar"] into a `Pathname` based on Less::More.source_path.
+    # Converts ["foo", "bar"] into a `Pathname` based on Less::More.source_paths.
     def pathname_from_array(array)
       path_spec = array.dup
       path_spec[-1] = path_spec[-1] + ".{css,less,lss}"
-      Pathname.glob(File.join(self.source_path.to_s, *path_spec))[0]
+      source_paths.each do |source_path|
+        path = Pathname.glob(File.join(source_path.to_s, *path_spec))[0]
+        return path if path && path.exist?
+      end
+      Pathname.glob(File.join(source_paths.first.to_s, *path_spec))[0]
     end
   end
 end
