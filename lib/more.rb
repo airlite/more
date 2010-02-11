@@ -97,6 +97,12 @@ class Less::More
       @source_paths ||= Array.new
       @source_paths << path unless @source_paths.include?(path)
     end
+
+    # for backwards compatability
+    def source_path=(path)
+      @source_paths.clear if @source_paths
+      add_source_path path
+    end
     
     # Checks if a .less or .lss file exists in Less::More.source_paths matching
     # the given parameters.
@@ -129,7 +135,7 @@ class Less::More
       destination = File.join(destination_dir, source.basename.to_s.gsub('.less', '.css').gsub('.lss', '.css'))
       
       # check if the destination file exists, and compare the modified times to see if it needs to be written
-      if File.exists?(destination) and File.new(destination).mtime >= File.new(source).mtime
+      if self.page_cache_enabled_in_environment_configuration? && File.exists?(destination) and File.new(destination).mtime >= File.new(source).mtime
         # cached destination file is the same as the source, just return the cached file
         css = File.read(destination)
       else
@@ -144,12 +150,15 @@ class Less::More
           css.delete!("\n") if self.compression?
           css = (HEADER % [source.to_s]) << css if self.header?
         end
-        # make sure the appropriate cache directory exists
-        FileUtils.mkdir_p destination_dir
-        # write the css to our cache directory
-        File.open(destination, "w") {|f|
-          f.puts css
-        }
+        
+        if self.page_cache_enabled_in_environment_configuration?
+          # make sure the appropriate cache directory exists
+          FileUtils.mkdir_p destination_dir
+          # write the css to our cache directory
+          File.open(destination, "w") {|f|
+            f.puts css
+          }
+        end
       end
 
       # return the css

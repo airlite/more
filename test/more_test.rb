@@ -8,7 +8,6 @@ class MoreTest < Test::Unit::TestCase
       }
     end
   end
-  
 
   def test_getting_config_from_current_environment_or_defaults_to_production
     Less::More::DEFAULTS["development"]["foo"] = 5
@@ -65,7 +64,7 @@ class MoreTest < Test::Unit::TestCase
   
   def test_source_path
     Less::More.source_path = "/path/to/flaf"
-    assert_equal Pathname.new("/path/to/flaf"), Less::More.source_path
+    assert_equal [Pathname.new("/path/to/flaf")], Less::More.source_paths
   end
   
   def test_exists
@@ -81,6 +80,7 @@ class MoreTest < Test::Unit::TestCase
   end
   
   def test_generate
+    Less::More.expects(:page_cache_enabled_in_environment_configuration?).returns(false).at_least_once
     Less::More.source_path = File.join(File.dirname(__FILE__), 'less_files')
     Less::More.compression = true
     
@@ -88,6 +88,8 @@ class MoreTest < Test::Unit::TestCase
   end
   
   def test_header
+    Less::More.expects(:page_cache_enabled_in_environment_configuration?).returns(false).at_least_once
+    
     Less::More.expects(:header?).returns(false)
     Less::More.source_path = File.join(File.dirname(__FILE__), 'less_files')
     assert !Less::More.generate(["test"]).starts_with?("/*")

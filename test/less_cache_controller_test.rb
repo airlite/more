@@ -27,7 +27,6 @@ class LessCacheControllerTest < ActionController::IntegrationTest
   end
   
   test "404" do
-    Less::More.expects(:page_cache_enabled_in_environment_configuration?).returns(true)
     Less::More.expects(:generate).never
     get "stylesheets/does_not_exist.css"
     assert_response 404
