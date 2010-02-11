@@ -21,20 +21,6 @@ module Rails
   def backtrace_cleaner
     ActiveSupport::BacktraceCleaner.new
   end
-  
-#  def configuration
-#    Rails::Configuration.new
-#  end
-  
-  class Configuration
-    def action_controller
-      self
-    end
-    
-    def perform_caching
-      false
-    end
-  end
 end
 
 class ApplicationController < ActionController::Base
