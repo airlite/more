@@ -179,7 +179,15 @@ class Less::More
 
           # Store CSS
           path_as_array[-1] = path_as_array[-1] + ".css"
-          destination = Pathname.new(File.join(Rails.root, "public", Less::More.destination_path)).join(*path_as_array)
+          # if it's in a plugin, put it under plugin_assets/<plugin>/<destination_path>
+          rails_relative_path = path.relative_path_from(Rails.root)
+          destination = if rails_relative_path.to_s.start_with?(File.join('vendor', 'plugins'))
+            plugin_name = path.relative_path_from(Rails.root.join('vendor', 'plugins')).to_s.split('/').first
+            Pathname.new(File.join(Rails.root, "public", 'plugin_assets', plugin_name, Less::More.destination_path)).join(*path_as_array)
+          else
+            Pathname.new(File.join(Rails.root, "public", Less::More.destination_path)).join(*path_as_array)
+          end
+          puts destination.to_s
           destination.dirname.mkpath
 
           File.open(destination, "w") {|f|
