@@ -187,12 +187,12 @@ class Less::More
           else
             Pathname.new(File.join(Rails.root, "public", Less::More.destination_path)).join(*path_as_array)
           end
-          puts destination.to_s
-          destination.dirname.mkpath
-
-          File.open(destination, "w") {|f|
-            f.puts css
-          }
+          
+          if !destination.exist? || source_path.ctime > destination.ctime
+            puts "writing #{destination}"
+            destination.dirname.mkpath
+            File.open(destination, "w") { |f| f.puts css }
+          end
         end
       end
     end
@@ -203,8 +203,19 @@ class Less::More
         all_less_files(source_path).each do |path|
           relative_path = path.relative_path_from(source_path)
           css_path = relative_path.to_s.sub(/(le?|c)ss$/, "css")
-          css_file = File.join(Rails.root, "public", Less::More.destination_path, css_path)
-          File.delete(css_file) if File.file?(css_file)
+          path_as_array = css_path.to_s.split(File::SEPARATOR)
+          rails_relative_path = path.relative_path_from(Rails.root)
+          
+          css_file = if rails_relative_path.to_s.start_with?(File.join('vendor', 'plugins'))
+            plugin_name = path.relative_path_from(Rails.root.join('vendor', 'plugins')).to_s.split('/').first
+            Pathname.new(File.join(Rails.root, "public", 'plugin_assets', plugin_name, Less::More.destination_path)).join(*path_as_array)
+          else
+            Pathname.new(File.join(Rails.root, "public", Less::More.destination_path)).join(*path_as_array)
+          end
+          if css_file.exist?
+            puts "deleting #{css_file}"
+            css_file.delete
+          end
         end
       end
     end
@@ -213,7 +224,7 @@ class Less::More
     def all_less_files(paths = source_paths)
       [paths].flatten.collect do |path|
         Dir[path.join("**", "*.{css,less,lss}").to_s].map! { |f| Pathname.new(f) }
-      end.flatten
+      end.flatten.find_all { |path| !path.basename.to_s.start_with?('_') }
     end
     
     # Converts ["foo", "bar"] into a `Pathname` based on Less::More.source_paths.

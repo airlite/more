@@ -6,6 +6,9 @@ config.after_initialize {
     Less::More.add_source_path File.join(plugin.directory, 'app', 'stylesheets') if File.directory?(File.join(plugin.directory, 'app', 'stylesheets'))
   end
   
-  Less::More.clean
-  Less::More.parse if Less::More.page_cache?
+  if Less::More.page_cache?
+    Less::More.parse 
+  else
+    Less::More.clean 
+  end
 }
